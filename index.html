@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Website Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { min-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        textarea { resize: none; }
+        .sidebar-transition { transition: transform 0.3s ease, opacity 0.3s ease; }
+        .code-editor { font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace; tab-size: 2; }
+        .modal-backdrop { backdrop-filter: blur(4px); }
+        .project-item:hover { background: #374151; }
+        .project-item.active { background: #1e40af; }
+        .dot-btn { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; }
+        .pulse-send { animation: pulse-ring 1.5s infinite; }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+            70% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;
+            animation: typing 1.4s infinite;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+        @media (max-width: 768px) {
+            .sidebar-mobile-hidden { transform: translateX(-100%); opacity: 0; }
+            .sidebar-mobile-visible { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100">
+
+    <!-- App Container -->
+    <div id="app" class="flex flex-1 overflow-hidden" style="min-height: 0;">
+
+        <!-- Sidebar Overlay (Mobile) -->
+        <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden" onclick="toggleSidebar()"></div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar-transition w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0 z-40 fixed md:relative h-full md:translate-x-0 -translate-x-full md:opacity-100 opacity-0">
+            <!-- New Project Button -->
+            <div class="p-3 border-b border-gray-800">
+                <button onclick="createNewProject()" class="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors duration-200 shadow-lg shadow-blue-600/20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    New Project
+                </button>
+            </div>
+
+            <!-- Project List -->
+            <div class="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-1" id="projectList">
+                <!-- Projects rendered here -->
+            </div>
+
+            <!-- Settings Button -->
+            <div class="p-3 border-t border-gray-800 flex-shrink-0">
+                <button onclick="openSettings()" class="w-full flex items-center gap-3 text-gray-400 hover:text-white hover:bg-gray-800 py-2.5 px-3 rounded-lg transition-colors duration-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span class="text-sm font-medium">Settings</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+            <!-- Header -->
+            <header class="flex items-center justify-between px-4 py-2.5 bg-gray-900/80 border-b border-gray-800 flex-shrink-0 backdrop-blur-sm">
+                <div class="flex items-center gap-3">
+                    <!-- Mobile Menu Button -->
+                    <button onclick="toggleSidebar()" class="md:hidden text-gray-400 hover:text-white p-1">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                    <!-- Traffic Dots -->
+                    <div class="flex items-center gap-1.5">
+                        <span class="dot-btn bg-red-500 hover:bg-red-400"></span>
+                        <span class="dot-btn bg-yellow-500 hover:bg-yellow-400"></span>
+                        <span class="dot-btn bg-green-500 hover:bg-green-400"></span>
+                    </div>
+                    <h1 class="text-sm font-semibold text-gray-300 hidden sm:block">AI Website Builder</h1>
+                </div>
+
+                <!-- Toggle Buttons -->
+                <div class="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
+                    <button id="btnPreview" onclick="setView('preview')" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 bg-blue-600 text-white">
+                        Preview
+                    </button>
+                    <button id="btnCode" onclick="setView('code')" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 text-gray-400 hover:text-white">
+                        Code
+                    </button>
+                </div>
+
+                <!-- Download Button -->
+                <button onclick="downloadProject()" class="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white py-2 px-3 rounded-lg transition-colors duration-200 text-sm font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    <span class="hidden sm:inline">Download</span>
+                </button>
+            </header>
+
+            <!-- Content Area -->
+            <div class="flex-1 overflow-hidden relative" style="min-height: 0;">
+                <!-- Preview View -->
+                <div id="previewView" class="w-full h-full">
+                    <iframe id="previewFrame" class="w-full h-full bg-white" sandbox="allow-scripts allow-same-origin" srcdoc=""></iframe>
+                </div>
+
+                <!-- Code View -->
+                <div id="codeView" class="w-full h-full hidden">
+                    <textarea id="codeEditor" class="code-editor w-full h-full bg-gray-950 text-green-400 p-4 text-sm leading-relaxed outline-none scrollbar-thin" spellcheck="false" oninput="onCodeEdit()"></textarea>
+                </div>
+
+                <!-- Loading Overlay -->
+                <div id="loadingOverlay" class="absolute inset-0 bg-gray-950/80 flex items-center justify-center hidden z-20">
+                    <div class="text-center">
+                        <div class="typing-indicator mb-3 flex justify-center gap-1.5">
+                            <span></span><span></span><span></span>
+                        </div>
+                        <p class="text-gray-400 text-sm">Generating your website...</p>
+                    </div>
+                </div>
+
+                <!-- Welcome Screen -->
+                <div id="welcomeScreen" class="absolute inset-0 flex items-center justify-center bg-gray-950 z-10">
+                    <div class="text-center max-w-md px-6">
+                        <div class="text-6xl mb-4">🚀</div>
+                        <h2 class="text-2xl font-bold text-white mb-2">AI Website Builder</h2>
+                        <p class="text-gray-400 mb-6">Describe the website you want to build and let AI create it for you.</p>
+                        <div class="flex flex-wrap justify-center gap-2">
+                            <button onclick="quickPrompt('A modern landing page for a SaaS product')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition-colors">Landing Page</button>
+                            <button onclick="quickPrompt('A personal portfolio website with dark theme')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition-colors">Portfolio</button>
+                            <button onclick="quickPrompt('A restaurant menu website with elegant design')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition-colors">Restaurant</button>
+                            <button onclick="quickPrompt('A todo app with local storage')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-2 rounded-lg transition-colors">Todo App</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Messages (collapsible) -->
+            <div id="chatMessages" class="max-h-40 overflow-y-auto scrollbar-thin bg-gray-900/50 border-t border-gray-800 hidden flex-shrink-0">
+                <div id="messagesContainer" class="p-3 space-y-2"></div>
+            </div>
+
+            <!-- Footer Input -->
+            <footer class="flex-shrink-0 border-t border-gray-800 bg-gray-900/80 backdrop-blur-sm p-3">
+                <div class="flex items-end gap-2 max-w-4xl mx-auto">
+                    <textarea id="userInput" rows="1" placeholder="Describe the website you want to build..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 scrollbar-thin" style="max-height: 120px;" oninput="autoResize(this)" onkeydown="handleKeyDown(event)"></textarea>
+                    <button id="sendBtn" onclick="sendMessage()" class="flex-shrink-0 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/20" disabled>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 0l-7 7m7-7l7 7"/></svg>
+                    </button>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/60" onclick="closeSettings()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md relative z-10">
+                <div class="flex items-center justify-between p-5 border-b border-gray-800">
+                    <h3 class="text-lg font-bold text-white">Settings</h3>
+                    <button onclick="closeSettings()" class="text-gray-400 hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-5">
+                    <!-- API URL -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1.5">API URL</label>
+                        <input id="settingsApiUrl" type="url" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm text-gray-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="https://openrouter.ai/api/v1/chat/completions">
+                    </div>
+                    <!-- API Key -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1.5">API Key</label>
+                        <input id="settingsApiKey" type="password" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm text-gray-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="sk-or-...">
+                    </div>
+                    <!-- Model ID -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1.5">Model ID</label>
+                        <input id="settingsModelId" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm text-gray-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="deepseek/deepseek-r1:free">
+                    </div>
+                </div>
+                <div class="p-5 border-t border-gray-800 flex justify-end gap-3">
+                    <button onclick="closeSettings()" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors">Cancel</button>
+                    <button onclick="saveSettings()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-lg shadow-blue-600/20">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0 bg-black/60" onclick="closeDeleteModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-sm relative z-10">
+                <div class="p-5 text-center">
+                    <div class="text-4xl mb-3">🗑️</div>
+                    <h3 class="text-lg font-bold text-white mb-2">Delete Project?</h3>
+                    <p class="text-gray-400 text-sm" id="deleteProjectName"></p>
+                </div>
+                <div class="p-5 border-t border-gray-800 flex justify-center gap-3">
+                    <button onclick="closeDeleteModal()" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors">Cancel</button>
+                    <button onclick="confirmDelete()" class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // SYSTEM PROMPT
+        // ==========================================
+        const SYSTEM_PROMPT = "You are a web developer. Output ONLY raw HTML code. Do not include any explanation, markdown formatting, or code fences. Do not wrap the output in ```html or ``` blocks. The response must start with <!DOCTYPE html> or <html> and contain a complete, valid HTML document with inline CSS and JavaScript. Make the design modern, responsive, and visually appealing. Use clean, professional styling.";
+
+        // ==========================================
+        // DEFAULT SETTINGS
+        // ==========================================
+        const DEFAULT_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+        const DEFAULT_MODEL_ID = "deepseek/deepseek-r1:free";
+
+        // ==========================================
+        // STATE
+        // ==========================================
+        let state = {
+            settings: {
+                apiUrl: DEFAULT_API_URL,
+                apiKey: "",
+                modelId: DEFAULT_MODEL_ID
+            },
+            projects: [],
+            activeProjectId: null
+        };
+
+        let currentView = "preview";
+        let isGenerating = false;
+        let deleteTargetId = null;
+        let sidebarOpen = false;
+
+        // ==========================================
+        // LOCAL STORAGE
+        // ==========================================
+        function saveState() {
+            try {
+                localStorage.setItem("aiWebsiteBuilder", JSON.stringify(state));
+            } catch (e) {
+                console.warn("Failed to save state:", e);
+            }
+        }
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem("aiWebsiteBuilder");
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state.settings = { ...state.settings, ...parsed.settings };
+                    state.projects = parsed.projects || [];
+                    state.activeProjectId = parsed.activeProjectId || null;
+
+                    // Ensure API URL is correct if empty
+                    if (!state.settings.apiUrl) {
+                        state.settings.apiUrl = DEFAULT_API_URL;
+                    }
+                    if (!state.settings.modelId) {
+                        state.settings.modelId = DEFAULT_MODEL_ID;
+                    }
+                }
+            } catch (e) {
+                console.warn("Failed to load state:", e);
+            }
+        }
+
+        // ==========================================
+        // PROJECT MANAGEMENT
+        // ==========================================
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+        }
+
+        function getActiveProject() {
+            return state.projects.find(p => p.id === state.activeProjectId) || null;
+        }
+
+        function createNewProject() {
+            const project = {
+                id: generateId(),
+                name: "Untitled Project",
+                html: "",
+                messages: [],
+                createdAt: Date.now()
+            };
+            state.projects.unshift(project);
+            state.activeProjectId = project.id;
+            saveState();
+            renderProjects();
+            resetMainView();
+            closeSidebarMobile();
+        }
+
+        function selectProject(id) {
+            state.activeProjectId = id;
+            saveState();
+            renderProjects();
+            const project = getActiveProject();
+            if (project) {
+                if (project.html) {
+                    document.getElementById("welcomeScreen").classList.add("hidden");
+                    updatePreview(project.html);
+                    document.getElementById("codeEditor").value = project.html;
+                } else {
+                    document.getElementById("welcomeScreen").classList.remove("hidden");
+                    updatePreview("");
+                    document.getElementById("codeEditor").value = "";
+                }
+                renderMessages(project.messages);
+            }
+            closeSidebarMobile();
+        }
+
+        function deleteProject(id, event) {
+            event.stopPropagation();
+            const project = state.projects.find(p => p.id === id);
+            if (project) {
+                deleteTargetId = id;
+                document.getElementById("deleteProjectName").textContent = `"${project.name}" will be permanently deleted.`;
+                document.getElementById("deleteModal").classList.remove("hidden");
+            }
+        }
+
+        function confirmDelete() {
+            if (deleteTargetId) {
+                state.projects = state.projects.filter(p => p.id !== deleteTargetId);
+                if (state.activeProjectId === deleteTargetId) {
+                    state.activeProjectId = state.projects.length > 0 ? state.projects[0].id : null;
+                }
+                saveState();
+                renderProjects();
+                if (state.activeProjectId) {
+                    selectProject(state.activeProjectId);
+                } else {
+                    resetMainView();
+                }
+            }
+            closeDeleteModal();
+        }
+
+        function closeDeleteModal() {
+            document.getElementById("deleteModal").classList.add("hidden");
+            deleteTargetId = null;
+        }
+
+        function renameProject(id, event) {
+            event.stopPropagation();
+            const project = state.projects.find(p => p.id === id);
+            if (!project) return;
+            const newName = prompt("Enter new project name:", project.name);
+            if (newName && newName.trim()) {
+                project.name = newName.trim();
+                saveState();
+                renderProjects();
+            }
+        }
+
+        // ==========================================
+        // RENDER
+        // ==========================================
+        function renderProjects() {
+            const container = document.getElementById("projectList");
+            if (state.projects.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 px-4">
+                        <div class="text-3xl mb-2">📁</div>
+                        <p class="text-gray-500 text-xs">No projects yet</p>
+                    </div>
+                `;
+                return;
+            }
+            container.innerHTML = state.projects.map(p => `
+                <div class="project-item group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-colors duration-150 $${p.id === state.activeProjectId ? 'active' : ''}" onclick="selectProject('$${p.id}')">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium truncate $${p.id === state.activeProjectId ? 'text-white' : 'text-gray-300'}">$${escapeHtml(p.name)}</p>
+                        <p class="text-xs text-gray-500 mt-0.5">${formatDate(p.createdAt)}</p>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                        <button onclick="renameProject('${p.id}', event)" class="p-1 text-gray-400 hover:text-white rounded transition-colors" title="Rename">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        </button>
+                        <button onclick="deleteProject('${p.id}', event)" class="p-1 text-gray-400 hover:text-red-400 rounded transition-colors" title="Delete">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        function renderMessages(messages) {
+            const chatEl = document.getElementById("chatMessages");
+            const container = document.getElementById("messagesContainer");
+            if (!messages || messages.length === 0) {
+                chatEl.classList.add("hidden");
+                container.innerHTML = "";
+                return;
+            }
+            chatEl.classList.remove("hidden");
+            container.innerHTML = messages.filter(m => m.role === "user").map(m => `
+                <div class="flex items-start gap-2">
+                    <div class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">U</div>
+                    <div class="bg-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 max-w-full">
+                        ${escapeHtml(m.content)}
+                    </div>
+                </div>
+            `).join("");
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
+
+        function resetMainView() {
+            document.getElementById("welcomeScreen").classList.remove("hidden");
+            document.getElementById("chatMessages").classList.add("hidden");
+            document.getElementById("messagesContainer").innerHTML = "";
+            updatePreview("");
+            document.getElementById("codeEditor").value = "";
+        }
+
+        // ==========================================
+        // VIEW TOGGLE
+        // ==========================================
+        function setView(view) {
+            currentView = view;
+            const previewView = document.getElementById("previewView");
+            const codeView = document.getElementById("codeView");
+            const btnPreview = document.getElementById("btnPreview");
+            const btnCode = document.getElementById("btnCode");
+
+            if (view === "preview") {
+                previewView.classList.remove("hidden");
+                codeView.classList.add("hidden");
+                btnPreview.className = "px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 bg-blue-600 text-white";
+                btnCode.className = "px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 text-gray-400 hover:text-white";
+                // Sync code to preview
+                const project = getActiveProject();
+                if (project && project.html) {
+                    updatePreview(project.html);
+                }
+            } else {
+                previewView.classList.add("hidden");
+                codeView.classList.remove("hidden");
+                btnCode.className = "px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 bg-blue-600 text-white";
+                btnPreview.className = "px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 text-gray-400 hover:text-white";
+            }
+        }
+
+        function updatePreview(html) {
+            const frame = document.getElementById("previewFrame");
+            frame.srcdoc = html || "";
+        }
+
+        function onCodeEdit() {
+            const project = getActiveProject();
+            if (project) {
+                project.html = document.getElementById("codeEditor").value;
+                saveState();
+            }
+        }
+
+        // ==========================================
+        // SIDEBAR
+        // ==========================================
+        function toggleSidebar() {
+            const sidebar = document.getElementById("sidebar");
+            const overlay = document.getElementById("sidebarOverlay");
+            sidebarOpen = !sidebarOpen;
+            if (sidebarOpen) {
+                sidebar.classList.remove("-translate-x-full", "opacity-0");
+                sidebar.classList.add("translate-x-0", "opacity-100");
+                overlay.classList.remove("hidden");
+            } else {
+                sidebar.classList.add("-translate-x-full", "opacity-0");
+                sidebar.classList.remove("translate-x-0", "opacity-100");
+                overlay.classList.add("hidden");
+            }
+        }
+
+        function closeSidebarMobile() {
+            if (window.innerWidth < 768 && sidebarOpen) {
+                toggleSidebar();
+            }
+        }
+
+        // ==========================================
+        // SETTINGS
+        // ==========================================
+        function openSettings() {
+            document.getElementById("settingsApiUrl").value = state.settings.apiUrl;
+            document.getElementById("settingsApiKey").value = state.settings.apiKey;
+            document.getElementById("settingsModelId").value = state.settings.modelId;
+            document.getElementById("settingsModal").classList.remove("hidden");
+        }
+
+        function closeSettings() {
+            document.getElementById("settingsModal").classList.add("hidden");
+        }
+
+        function saveSettings() {
+            state.settings.apiUrl = document.getElementById("settingsApiUrl").value.trim() || DEFAULT_API_URL;
+            state.settings.apiKey = document.getElementById("settingsApiKey").value.trim();
+            state.settings.modelId = document.getElementById("settingsModelId").value.trim() || DEFAULT_MODEL_ID;
+            saveState();
+            closeSettings();
+        }
+
+        // ==========================================
+        // DOWNLOAD
+        // ==========================================
+        function downloadProject() {
+            const project = getActiveProject();
+            if (!project || !project.html) {
+                alert("No HTML content to download. Generate a website first!");
+                return;
+            }
+            const blob = new Blob([project.html], { type: "text/html" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = (project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || "website") + ".html";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // ==========================================
+        // MESSAGING / API
+        // ==========================================
+        function quickPrompt(text) {
+            document.getElementById("userInput").value = text;
+            autoResize(document.getElementById("userInput"));
+            updateSendButton();
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById("userInput");
+            const message = input.value.trim();
+            if (!message || isGenerating) return;
+
+            // Validate settings
+            if (!state.settings.apiKey) {
+                alert("Please set your API Key in Settings first.");
+                openSettings();
+                return;
+            }
+
+            // Ensure a project exists
+            if (!state.activeProjectId) {
+                createNewProject();
+            }
+
+            const project = getActiveProject();
+            if (!project) return;
+
+            // Auto-name project from first message
+            if (project.messages.length === 0 && project.name === "Untitled Project") {
+                project.name = message.length > 40 ? message.substring(0, 40) + "..." : message;
+            }
+
+            // Add user message
+            project.messages.push({ role: "user", content: message });
+            saveState();
+            renderMessages(project.messages);
+            renderProjects();
+
+            // Clear input
+            input.value = "";
+            autoResize(input);
+            updateSendButton();
+
+            // Hide welcome screen
+            document.getElementById("welcomeScreen").classList.add("hidden");
+
+            // Show loading
+            isGenerating = true;
+            document.getElementById("loadingOverlay").classList.remove("hidden");
+            document.getElementById("sendBtn").disabled = true;
+
+            try {
+                // Build messages for API
+                const apiMessages = [
+                    { role: "system", content: SYSTEM_PROMPT }
+                ];
+
+                // Include conversation context (last few exchanges)
+                const relevantMessages = project.messages.slice(-10);
+                for (const msg of relevantMessages) {
+                    apiMessages.push({
+                        role: msg.role,
+                        content: msg.content
+                    });
+                }
+
+                // If there's existing HTML context and this isn't the first message, include it
+                if (project.html && project.messages.length > 1) {
+                    // Add context about existing code
+                    const lastUserMsgIndex = apiMessages.length - 1;
+                    apiMessages[lastUserMsgIndex].content = `Current HTML code:\n\`\`\`html\n$${project.html}\n\`\`\`\n\nUser request: $${message}\n\nModify the above HTML according to the user's request. Output ONLY the complete, updated raw HTML code.`;
+                }
+
+                const response = await fetch(state.settings.apiUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + state.settings.apiKey,
+                        "HTTP-Referer": window.location.href,
+                        "X-Title": "AI Website Builder"
+                    },
+                    body: JSON.stringify({
+                        model: state.settings.modelId,
+                        messages: apiMessages,
+                        max_tokens: 16000,
+                        temperature: 0.7
+                    })
+                });
+
+                // Anti-Crash JSON Logic: read text first
+                const text = await response.text();
+
+                if (!response.ok) {
+                    alert("API Error: " + text);
+                    // Remove the user message since it failed
+                    project.messages.pop();
+                    saveState();
+                    renderMessages(project.messages);
+                    return;
+                }
+
+                // Now safely parse
+                const data = JSON.parse(text);
+
+                let assistantContent = "";
+                if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+                    assistantContent = data.choices[0].message.content || "";
+                }
+
+                if (!assistantContent) {
+                    alert("No content received from the API. The response was empty.");
+                    return;
+                }
+
+                // Extract HTML from response (clean up markdown fences if present)
+                let htmlContent = extractHtml(assistantContent);
+
+                // Save assistant message and HTML
+                project.messages.push({ role: "assistant", content: "Website generated/updated successfully." });
+                project.html = htmlContent;
+                saveState();
+
+                // Update views
+                updatePreview(htmlContent);
+                document.getElementById("codeEditor").value = htmlContent;
+                renderMessages(project.messages);
+                renderProjects();
+
+            } catch (error) {
+                console.error("API Error:", error);
+                alert("Error: " + error.message);
+                // Remove the user message since it failed
+                if (project.messages.length > 0 && project.messages[project.messages.length - 1].role === "user") {
+                    project.messages.pop();
+                    saveState();
+                    renderMessages(project.messages);
+                }
+            } finally {
+                isGenerating = false;
+                document.getElementById("loadingOverlay").classList.add("hidden");
+                updateSendButton();
+            }
+        }
+
+        function extractHtml(content) {
+            // Remove thinking tags if present (deepseek-r1)
